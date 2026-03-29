@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { supabase, supabaseConfigured, Message } from './lib/supabase';
+import { supabase, supabaseConfigError, supabaseConfigured, Message } from './lib/supabase';
 
 const SUBJECTS = [
   'Matematik',
@@ -39,6 +39,10 @@ function App() {
   };
 
   const loadMessages = async () => {
+    if (!supabaseConfigured) {
+      return;
+    }
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
@@ -63,6 +67,8 @@ function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!supabaseConfigured) return;
 
     if (!userMessage.trim()) return;
 
@@ -123,6 +129,9 @@ function App() {
             <pre className="mt-2 text-sm bg-yellow-100 rounded p-2 overflow-x-auto">
               {ENV_TEMPLATE}
             </pre>
+            {supabaseConfigError && (
+              <p className="mt-2 text-sm font-semibold text-yellow-900">{supabaseConfigError}</p>
+            )}
           </div>
         )}
 

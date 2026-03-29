@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { supabase, Message } from './lib/supabase';
+import { supabase, supabaseConfigured, Message } from './lib/supabase';
 
 const SUBJECTS = [
   'Matematik',
@@ -12,6 +12,9 @@ const SUBJECTS = [
   'Tarih',
   'Din',
 ];
+
+const ENV_TEMPLATE =
+  'VITE_SUPABASE_URL=https://<proje-id>.supabase.co\nVITE_SUPABASE_ANON_KEY=<anon-public-key>';
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -111,6 +114,17 @@ function App() {
           <h1 className="text-3xl font-bold text-gray-800">AI Öğretmen</h1>
           <p className="text-gray-600 mt-1">Sorularını sor, öğrenmeye başla</p>
         </header>
+
+        {!supabaseConfigured && (
+          <div className="mx-6 mt-6 p-4 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-800">
+            <strong>Yapılandırma eksik:</strong> Lütfen proje kök dizininde bir{' '}
+            <code className="font-mono bg-yellow-100 px-1 rounded">.env</code> dosyası oluşturun ve
+            aşağıdaki değişkenleri ekleyin:
+            <pre className="mt-2 text-sm bg-yellow-100 rounded p-2 overflow-x-auto">
+              {ENV_TEMPLATE}
+            </pre>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
           {messages.length === 0 ? (

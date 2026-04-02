@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, ImagePlus, Loader2, BookOpen, X, Sparkles } from 'lucide-react';
+import { Send, ImagePlus, Loader2, BookOpen, X, Sparkles, Download, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { Message } from './models/Message.ts';
+
+let aiResponseCount = 0;
+
+const generateAiResponse = () => {
+  aiResponseCount++;
+  return `Merhaba, ben AI! ${aiResponseCount.toString()}`;
+};
 
 const SUBJECTS = [
   'Matematik',
@@ -30,13 +37,28 @@ function App() {
   const [selectedSubject, setSelectedSubject] = useState(SUBJECTS[0]);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<{ messageId: string; role: 'user' | 'ai' } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.message-actions')) {
+        setOpenMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,35 +74,132 @@ function App() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitMessage = async () => {
     if (!userMessage.trim() && !imagePreview) return;
     setIsLoading(true);
     try {
-      let imageUrl = null;
-      if (selectedImage && imagePreview) imageUrl = imagePreview;
+      const imageUrl = imagePreview;
+      const nextAiResponse = generateAiResponse();
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const placeholderMessage: Message = {
-        id: crypto.randomUUID(),
-        subject: selectedSubject,
-        user_message: userMessage,
-        image_url: imageUrl,
-        ai_response: 'Merhaba, ben AI!',
-        created_at: new Date().toISOString(),
-      };
+      if (editingMessageId) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === editingMessageId
+              ? {
+                  ...message,
+                  subject: selectedSubject,
+                  user_message: userMessage,
+                  image_url: imageUrl,
+                  ai_response: nextAiResponse,
+                }
+              : message
+          )
+        );
+      } else {
+        const placeholderMessage: Message = {
+          id: crypto.randomUUID(),
+          subject: selectedSubject,
+          user_message: userMessage,
+          image_url: imageUrl,
+          ai_response: nextAiResponse,
+          created_at: new Date().toISOString(),
+          references: [
+            {
+              id: 'turkce12anadolu-p16-1',
+              course: 'Türkçe',
+              grade: '12',
+              book_type: 'Anadolu',
+              unit: 'Ünite Sunusu',
+              section: 'GİRİŞ ÜNİTESİNDE NELER YAPACAKSINIZ?',
+              page_ref: '16',
+              source: 'ÖDSGM 2025-2026',
+              data_version: 'Feb_24_2026',
+            },
+          ],
+        };
 
-      setMessages((prev) => [...prev, placeholderMessage]);
+        setMessages((prev) => [...prev, placeholderMessage]);
+      }
+
       setUserMessage('');
       setSelectedImage(null);
       setImagePreview(null);
+      setEditingMessageId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitMessage();
+  };
+
+  const handleDeleteUserMessage = (messageId: string) => {
+    setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    if (editingMessageId === messageId) {
+      setEditingMessageId(null);
+      setUserMessage('');
+      setImagePreview(null);
+      setSelectedImage(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+    setOpenMenu(null);
+  };
+
+  const handleDeleteAiMessage = (messageId: string) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              ai_response: null,
+            }
+          : message
+      )
+    );
+    setOpenMenu(null);
+  };
+
+  const handleEditMessage = (message: Message) => {
+    setEditingMessageId(message.id);
+    setSelectedSubject(message.subject);
+    setUserMessage(message.user_message);
+    setImagePreview(message.image_url);
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setOpenMenu(null);
+    textareaRef.current?.focus();
+  };
+
+  const cancelEdit = () => {
+    setEditingMessageId(null);
+    setUserMessage('');
+    setImagePreview(null);
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleExportMessages = () => {
+    if (messages.length === 0) return;
+
+    const jsonContent = JSON.stringify(messages, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    link.href = downloadUrl;
+    link.download = `konusmalar-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
   };
 
   return (
@@ -324,9 +443,14 @@ function App() {
           justify-content: flex-end;
         }
 
-        .user-bubble {
+        .user-bubble-holder,
+        .ai-bubble-holder {
+          position: relative;
           max-width: 68%;
           min-width: 0;
+        }
+
+        .user-bubble {
           background: linear-gradient(135deg, #166534, #15803d);
           border-radius: 18px 18px 4px 18px;
           padding: 14px 18px;
@@ -383,12 +507,88 @@ function App() {
         }
 
         .ai-bubble {
-          max-width: 68%;
-          min-width: 0;
           background: var(--bg-card);
           border: 1px solid var(--border-bright);
           border-radius: 18px 18px 18px 4px;
           padding: 14px 18px;
+        }
+
+        .message-actions {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 5;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+        }
+
+        .ai-bubble-holder .message-actions {
+          right: 10px;
+        }
+
+        .user-bubble-holder:hover .message-actions,
+        .ai-bubble-holder:hover .message-actions,
+        .message-actions.open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .message-action-btn {
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
+          border: 1px solid #ffffff33;
+          background: #0b120caa;
+          color: #d1fae5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+
+        .message-action-btn:hover {
+          background: #0f1a11;
+        }
+
+        .action-menu {
+          position: absolute;
+          right: 0;
+          top: 30px;
+          min-width: 108px;
+          background: #101911;
+          border: 1px solid var(--border-bright);
+          border-radius: 10px;
+          box-shadow: 0 8px 24px #00000055;
+          overflow: hidden;
+        }
+
+        .action-item {
+          width: 100%;
+          padding: 8px 10px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 12px;
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .action-item:hover {
+          background: #1a2a1c;
+          color: var(--text-primary);
+        }
+
+        .action-item.delete {
+          color: #fca5a5;
+        }
+
+        .action-item.delete:hover {
+          background: #2a1515;
+          color: #fecaca;
         }
 
         .ai-label {
@@ -424,6 +624,34 @@ function App() {
           position: relative;
           display: inline-block;
           margin-bottom: 12px;
+        }
+
+        .edit-mode-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+          padding: 8px 10px;
+          border: 1px solid var(--border-bright);
+          background: #122015;
+          border-radius: 10px;
+          font-size: 12px;
+          color: var(--green-bright);
+        }
+
+        .edit-cancel-btn {
+          border: 1px solid var(--border-bright);
+          background: transparent;
+          color: var(--text-secondary);
+          border-radius: 8px;
+          padding: 4px 8px;
+          font-size: 11px;
+          cursor: pointer;
+        }
+
+        .edit-cancel-btn:hover {
+          color: var(--text-primary);
+          background: var(--bg-card);
         }
 
         .image-preview {
@@ -465,7 +693,7 @@ function App() {
 
         .main-textarea {
           width: 100%;
-          padding: 14px 48px 14px 16px;
+          padding: 14px 152px 14px 16px;
           background: var(--bg-elevated);
           border: 1px solid var(--border);
           border-radius: 14px;
@@ -513,6 +741,37 @@ function App() {
         }
 
         .img-attach-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .export-btn {
+          position: absolute;
+          right: 48px;
+          bottom: 10px;
+          height: 32px;
+          padding: 0 10px;
+          background: transparent;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 500;
+          transition: all 0.15s;
+        }
+
+        .export-btn:hover:not(:disabled) {
+          border-color: var(--border-bright);
+          color: var(--green-soft);
+          background: var(--bg-card);
+        }
+
+        .export-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
 
         .send-btn {
           width: 52px;
@@ -623,12 +882,42 @@ function App() {
                 messages.map((message) => (
                     <div key={message.id} className="msg-row">
                       <div className="user-bubble-wrap">
-                        <div className="user-bubble">
-                          <div className="bubble-subject">{message.subject}</div>
-                          <p className="bubble-text">{message.user_message}</p>
-                          {message.image_url && (
-                              <img src={message.image_url} alt="Yüklenen görsel" className="bubble-img" />
-                          )}
+                        <div className="user-bubble-holder">
+                          <div className={`message-actions ${openMenu?.messageId === message.id && openMenu.role === 'user' ? 'open' : ''}`}>
+                            <button
+                              type="button"
+                              className="message-action-btn"
+                              onClick={() =>
+                                setOpenMenu((prev) =>
+                                  prev?.messageId === message.id && prev.role === 'user'
+                                    ? null
+                                    : { messageId: message.id, role: 'user' }
+                                )
+                              }
+                            >
+                              <MoreVertical size={14} />
+                            </button>
+                            {openMenu?.messageId === message.id && openMenu.role === 'user' && (
+                              <div className="action-menu">
+                                <button type="button" className="action-item" onClick={() => handleEditMessage(message)}>
+                                  <Pencil size={13} />
+                                  Edit
+                                </button>
+                                <button type="button" className="action-item delete" onClick={() => handleDeleteUserMessage(message.id)}>
+                                  <Trash2 size={13} />
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="user-bubble">
+                            <div className="bubble-subject">{message.subject}</div>
+                            <p className="bubble-text">{message.user_message}</p>
+                            {message.image_url && (
+                                <img src={message.image_url} alt="Yüklenen görsel" className="bubble-img" />
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -637,9 +926,35 @@ function App() {
                             <div className="ai-avatar">
                               <Sparkles size={15} color="#86efac" />
                             </div>
-                            <div className="ai-bubble">
-                              <div className="ai-label">AI Öğretmen</div>
-                              <p className="ai-text">{message.ai_response}</p>
+                            <div className="ai-bubble-holder">
+                              <div className={`message-actions ${openMenu?.messageId === message.id && openMenu.role === 'ai' ? 'open' : ''}`}>
+                                <button
+                                  type="button"
+                                  className="message-action-btn"
+                                  onClick={() =>
+                                    setOpenMenu((prev) =>
+                                      prev?.messageId === message.id && prev.role === 'ai'
+                                        ? null
+                                        : { messageId: message.id, role: 'ai' }
+                                    )
+                                  }
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                                {openMenu?.messageId === message.id && openMenu.role === 'ai' && (
+                                  <div className="action-menu">
+                                    <button type="button" className="action-item delete" onClick={() => handleDeleteAiMessage(message.id)}>
+                                      <Trash2 size={13} />
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="ai-bubble">
+                                <div className="ai-label">AI Öğretmen</div>
+                                <p className="ai-text">{message.ai_response}</p>
+                              </div>
                             </div>
                           </div>
                       )}
@@ -651,6 +966,15 @@ function App() {
 
           {/* Input */}
           <div className="input-area">
+            {editingMessageId && (
+              <div className="edit-mode-bar">
+                <span>Mesaj duzenleme modu acik</span>
+                <button type="button" className="edit-cancel-btn" onClick={cancelEdit}>
+                  Iptal
+                </button>
+              </div>
+            )}
+
             {imagePreview && (
                 <div className="image-preview-wrap">
                   <img src={imagePreview} alt="Önizleme" className="image-preview" />
@@ -671,19 +995,30 @@ function App() {
               <div className="input-row">
                 <div className="textarea-wrap">
                 <textarea
+                    ref={textareaRef}
                     className="main-textarea"
                     value={userMessage}
                     onChange={(e) => setUserMessage(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        handleSubmit(e);
+                        submitMessage();
                       }
                     }}
-                    placeholder="Sorunuzu yazın... (Enter ile gönderin)"
+                    placeholder={editingMessageId ? 'Mesaji duzenleyin... (Enter ile kaydedin)' : 'Sorunuzu yazin... (Enter ile gonderin)'}
                     rows={2}
                     disabled={isLoading}
                 />
+                  <button
+                      type="button"
+                      className="export-btn"
+                      onClick={handleExportMessages}
+                      disabled={isLoading || messages.length === 0}
+                      title="Konuşmaları dışa aktar"
+                  >
+                    <Download size={13} />
+                    Dışa Aktar
+                  </button>
                   <button
                       type="button"
                       className="img-attach-btn"

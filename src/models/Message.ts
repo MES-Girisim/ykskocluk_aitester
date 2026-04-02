@@ -1,3 +1,5 @@
+import { Reference } from "./Reference";
+
 export interface Message {
   id: string;
   subject: string;
@@ -5,4 +7,5 @@ export interface Message {
   image_url: string | null;
   ai_response: string | null;
   created_at: string;
+  references: Reference[];
 }

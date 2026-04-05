@@ -7,5 +7,7 @@ export interface Message {
   image_url: string | null;
   ai_response: string | null;
   created_at: string;
-  references: Reference[];
+  references: Reference[] | null;
+  tokens: number;
+  time_passed: number;
 }
